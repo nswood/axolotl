@@ -1,0 +1,95 @@
+# DeepSeek-R1 Distilled Qwen 7B - Easy Rejection Sampling SFT
+# Full fine-tuning with DeepSpeed ZeRO-3
+
+base_model: deepseek-ai/DeepSeek-R1-Distill-Qwen-7B
+trust_remote_code: true
+
+# Dataset configuration - rejection sampled easy problems
+chat_template: qwen_25
+datasets:
+  - path: /mnt/beegfs/nwoodward/FT4TP/data/sft_synthetic_rejection_sampling/easy_rejection_sampled.json
+    ds_type: json
+    type: chat_template
+    field_messages: conversations
+    roles:
+      user:
+        - user
+      assistant:
+        - assistant
+
+# Validation dataset
+val_set_size: 0.0
+test_datasets:
+  - path: /mnt/beegfs/nwoodward/FT4TP/data/sft_synthetic_rejection_sampling/easy_val.json
+    ds_type: json
+    type: chat_template
+    field_messages: conversations
+    roles:
+      user:
+        - user
+      assistant:
+        - assistant
+
+dataset_prepared_path: last_run_prepared
+output_dir: ./outputs/deepseek-r1-qwen-7b-easy-rejection-sampling
+
+# Sequence length - 35k to fit longest samples (max ~33k tokens)
+# Note: HF tokenizer warnings about >16384 tokens are expected and harmless
+sequence_len: 35000
+sample_packing: true
+eval_sample_packing: true
+
+# Training hyperparameters (4x H200 141GB each)
+gradient_accumulation_steps: 2
+micro_batch_size: 2
+num_epochs: 3
+optimizer: adamw_torch_fused
+lr_scheduler: cosine
+learning_rate: 2e-5
+
+# Speed optimizations
+torch_compile: true
+dataloader_num_workers: 4
+dataloader_prefetch_factor: 2
+
+# Precision settings
+bf16: auto
+tf32: true
+
+# Memory optimization
+gradient_checkpointing: true
+gradient_checkpointing_kwargs:
+  use_reentrant: false
+
+# Logging and checkpointing
+logging_steps: 1
+flash_attention: true
+warmup_ratio: 0.1
+evals_per_epoch: 4
+saves_per_epoch: 1
+save_total_limit: 2
+weight_decay: 0.01
+
+# FSDP for multi-GPU training (4x H200)
+fsdp:
+  - full_shard
+  - auto_wrap
+fsdp_config:
+  fsdp_limit_all_gathers: true
+  fsdp_sync_module_states: true
+  fsdp_offload_params: false
+  fsdp_use_orig_params: false
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_transformer_layer_cls_to_wrap: Qwen2DecoderLayer
+  fsdp_state_dict_type: FULL_STATE_DICT
+  fsdp_sharding_strategy: FULL_SHARD
+
+# Wandb logging (uncomment and fill in to enable)
+wandb_project: deepseek-7B-SFT-rejection-sampling
+# wandb_entity:
+wandb_name: easy-rejection-sampling-run
+
+# Special tokens - Qwen2 uses specific tokens
+special_tokens:
+  pad_token: "<|endoftext|>"
